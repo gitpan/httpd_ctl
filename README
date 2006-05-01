@@ -1,0 +1,76 @@
+NAME
+    httpd_ctl - An apache control script that supports Template Toolkit
+    pre-processing
+
+SYNOPSIS
+    httpd_ctl [--all|-a] [--batch|-b] [--conf_file|-f *httpd.conf file*]
+    [--debug|-d] [--help|-h] [--man|-m] [--template|-t]
+    (start|stop|coldrestart|restart|graceful|configtest)+
+
+DESCRIPTION
+    An apache control script that supports Template Toolkit pre-processing
+
+OPTIONS
+    --conf_file|-f *httpd.conf file*
+        If file extension is .tt automatically implies --template
+
+    --debug|-d
+        prints debug messages
+
+    --help|-h
+        prints out usage information and exits
+
+    --httpd_opt|-o *options*
+        A quoted string specifying any additional options to pass through to
+        the httpd.
+
+    --man|-m
+        produces man page
+
+    --template|-t
+        Requires the --conf_file file to be processed by Template Toolkit.
+        The processed file will be placed in the same directory .
+
+        This allows you to do things like environment variable substitution:
+
+         [% USE env = EnvHash %]
+         [% env.MY_LOG_DIR %]
+
+        It is that simple!
+
+        But, remember you can do much more powerful things with Template
+        Toolkit, and use variables in control structures such as if, for,
+        foreach and so on. See http://www.template-toolkit.org/ to read
+        about Template Toolkit in full.
+
+    start
+        start httpd
+
+    stop
+        stop httpd
+
+    coldrestart
+        stop the httpd and then start it
+
+    restart
+        Restart httpd if running by sending a SIGHUP or start if not running
+
+    graceful
+        Do a graceful restart by sending a SIGUSR1 or start if not running
+
+    configtest
+        Do a configuration syntax test and check virtual hosts.
+
+EXIT STATUS
+            0 - Completed Successfully
+            1 - Otherwise
+
+AUTHOR
+    Sagar R. Shah
+
+COPYRIGHT & LICENSE
+    Copyright 2006 Sagar R. Shah, All Rights Reserved.
+
+    This program is free software; you can redistribute it and/or modify it
+    under the same terms as Perl itself.
+

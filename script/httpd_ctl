@@ -1,0 +1,375 @@
+#!/usr/bin/perl
+
+# pragmata
+use strict;
+use warnings;
+
+# CPAN modules
+use File::Basename;
+use File::Which;
+use Getopt::Long;
+use IO::All;
+use Log::Dispatch::Email::MIMELite;
+use Log::Log4perl;
+use Pod::Usage;
+use Proc::Reliable;
+use Switch;
+use Template;
+
+our $VERSION = '1.00';
+
+# process command line options
+my(%clo);
+Getopt::Long::config('no_ignore_case');
+Getopt::Long::GetOptions(\%clo, qw(all|a conf_file|f=s debug|d help|h man|m httpd_opt|o=s template|t=s log_file|l=s))
+	or pod2usage(-exitval => 10, -verbose => 0);
+
+setup_logger(\%clo);
+my $log = Log::Log4perl->get_logger();
+
+$clo{help} and pod2usage(1);
+$clo{man}  and pod2usage(-verbose => 2);
+$clo{conf_file} or $log->logdie("You must supply a configuration file!\n");
+
+@ARGV or pod2usage(-exitval => 9, -verbose => 1);
+
+exit httpd_ctl($clo{conf_file});
+
+sub httpd_ctl {
+	my($httpdconf) = @_;
+
+	$log->debug("Processing file $httpdconf\n");
+
+	my $httpd_opt    = $clo{httpd_opt} || "";
+
+	unless(-r $httpdconf) {
+		$log->warn("HTTPDCONF file $httpdconf is not readable!\n");
+		return 1;
+	}
+
+	# Pass config file through Template Toolkit if required
+	if ($clo{template} or $httpdconf =~ m/\.tt$/) {
+		$httpdconf = tt_process_file($httpdconf) or return 1;
+	}
+
+	my $httpd     = which('httpd') or $log->logdie('Unable to find httpd executable, please update your path');
+	$httpd       .= " -f $httpdconf";
+
+	$log->debug("Using httpd commandline $httpd\n");
+
+	my $arg = $ARGV[0];
+
+	switch($arg) {
+
+		case m/^(?:graceful|restart|start|stop)$/ {
+			run_apache($httpd, $arg) or return 1;
+		}
+
+		# TODO: add error handling, sleeps etc. and TEST
+		case /^coldrestart$/ {
+			# First stop the server
+			run_apache($httpd, 'stop');
+			sleep(5);  #wait a bit for all the children to shutdown
+			run_apache($httpd, 'start');
+
+			# Now start the server
+			start_apache($httpd) or return 1;
+		}
+
+		case m/^configtest$/ {
+			my $proc = Proc::Reliable->new();
+			$proc->run("$httpd -t 2>&1 | perl -ne 'print unless /syntax ok/i' 1>&2");
+			return 1 if($proc->status());
+			if(grep(/(?>!\#.*)VirtualHost/, io($httpdconf)->slurp)) {
+				print "Checking virtual host settings...\n";
+				$proc->run("$httpd -S 2>&1");
+				return 1 if($proc->status());
+			}
+		}
+
+		else {
+			pod2usage(2);
+		}
+
+	}
+	return 0;
+}
+
+sub run_apache {
+	my($httpd, $action) = @_;
+
+	$httpd .= " -k $action";
+
+	if($httpd =~ m/\s-X\b/) {
+		$log->debug("Starting httpd via system because -X is one of the httpd options\n");
+
+		# If running with the -X option the httpd will not put itself into the background, need to do this ourselves
+		$httpd .= " \&";
+
+
+		# may now also be able to replace this with Proc::Reliable need to test that it doesn't hang waiting
+		if (system($httpd) == 0) {
+			$log->info("httpd started\n");
+			return 1;
+		}
+		else {
+			$log->warn("httpd could not be started: $!\n");
+			return 0;
+		}
+	}
+
+	my $proc = Proc::Reliable->new();
+	$proc->run($httpd);
+
+	if ($proc->status()) {
+		$log->warn("httpd could not be started: $!\n");
+		return 0;
+	}
+	else {
+		$log->info($proc->stdout());
+		return 1;
+	}
+}
+
+sub tt_process_file($) {
+	my($infile) = @_;
+
+	my $outfile = "$infile.processed";
+
+	$log->debug("Template Toolkit processing $infile, output to $outfile\n");
+
+	# Process the files
+	my $tt = Template->new({
+			ABSOLUTE => 1,
+			RELATIVE => 1,
+		});
+
+	$tt->process($infile, {}, $outfile) or $log->warn("Template Toolkit Error processing $infile: " . $tt->error . "\n")  and return;
+
+	return $outfile;
+}
+
+#=for internaldocs
+#
+#	 setup_logger( $rh_args );
+#
+#Setup a Log4perl logger using the specified arguments.
+#
+#	 debug         - boolean denoting whether or not to log debugging messages
+#
+#	 email         - address to send email including all warnings, errors, and
+#									 fatal errors
+#
+#	 email_subject - subject of email (default is "$PROGRAM_NAME Errors")
+#
+#	 log_file      - file to write logged messages to
+#
+#This configuration prefixes each non info message with a symbol depending on its log level:
+#
+#=over 4
+#
+#=item %
+#
+#debug
+#
+#=item !
+#
+#warn
+#
+#=item !!
+#
+#error
+#
+#=item !!!
+#
+#fatal
+#
+#=back
+#
+#debug and info level messages which are sent to the screen are sent to STDOUT;
+#all higher level messages which are sent to the screen are sent to STDERR.
+#
+#=cut
+
+sub setup_logger {
+
+	my $rh_args = shift;
+	my %args    = ref $rh_args ? %$rh_args : ();
+
+	$args{diagnostics} ||= $args{debug};  # alternative name
+
+	my %symbols = (
+		WARN  => '! ',
+		ERROR => '!! ',
+		FATAL => '!!! ',
+		DEBUG => '% ',
+	);
+
+	Log::Log4perl::Layout::PatternLayout::add_global_cspec(
+		'S',
+		sub { $symbols{ $_[3] } || '' },
+	);
+
+	my %logger_cfg;
+
+	$logger_cfg{'log4perl.logger'} = 'DEBUG, Stdout, Stderr';
+
+	if ( $args{log_file} ) {
+		$logger_cfg{'log4perl.logger'                                   } .= ', Logfile';
+
+		$logger_cfg{'log4perl.filter.MatchLog'                          }  = 'Log::Log4perl::Filter::LevelRange';
+		$logger_cfg{'log4perl.filter.MatchLog.LevelMin'                 }  = $args{diagnostics} ? 'DEBUG' : 'INFO';
+		$logger_cfg{'log4perl.filter.MatchLog.LevelMax'                 }  = 'FATAL';
+		$logger_cfg{'log4perl.filter.MatchLog.AcceptOnMatch'            }  = 'true';
+
+		$logger_cfg{'log4perl.appender.Logfile'                         }  = 'Log::Log4perl::Appender::File';
+		$logger_cfg{'log4perl.appender.Logfile.Filter'                  }  = 'MatchLog';
+		$logger_cfg{'log4perl.appender.Logfile.filename'                }  = $args{log_file};
+		$logger_cfg{'log4perl.appender.Logfile.mode'                    }  = 'write';
+		$logger_cfg{'log4perl.appender.Logfile.layout'                  }  = 'Log::Log4perl::Layout::PatternLayout';
+		$logger_cfg{'log4perl.appender.Logfile.layout.ConversionPattern'}  = '%-5p %d{yyyyMMdd HH:mm:ss} %m';
+	}
+
+	$logger_cfg{'log4perl.filter.MatchInfo'                        } = 'Log::Log4perl::Filter::LevelRange';
+	$logger_cfg{'log4perl.filter.MatchInfo.LevelMin'               } = $args{diagnostics} ? 'DEBUG' : 'INFO';
+	$logger_cfg{'log4perl.filter.MatchInfo.LevelMax'               } = 'INFO';
+	$logger_cfg{'log4perl.filter.MatchInfo.AcceptOnMatch'          } = 'true';
+
+	$logger_cfg{'log4perl.filter.MatchNotInfo'                     } = 'Log::Log4perl::Filter::LevelRange';
+	$logger_cfg{'log4perl.filter.MatchNotInfo.LevelMin'            } = 'WARN';
+	$logger_cfg{'log4perl.filter.MatchNotInfo.LevelMax'            } = 'FATAL';
+	$logger_cfg{'log4perl.filter.MatchNotInfo.AcceptOnMatch'       } = 'true';
+
+	$logger_cfg{'log4perl.appender.Stdout'                         } = 'Log::Log4perl::Appender::Screen';
+	$logger_cfg{'log4perl.appender.Stdout.stderr'                  } = 0;
+	$logger_cfg{'log4perl.appender.Stdout.Filter'                  } = 'MatchInfo';
+	$logger_cfg{'log4perl.appender.Stdout.layout'                  } = 'Log::Log4perl::Layout::PatternLayout';
+	$logger_cfg{'log4perl.appender.Stdout.layout.ConversionPattern'} = '%S%m';
+
+	$logger_cfg{'log4perl.appender.Stderr'                         } = 'Log::Log4perl::Appender::Screen';
+	$logger_cfg{'log4perl.appender.Stderr.stderr'                  } = 1;
+	$logger_cfg{'log4perl.appender.Stderr.Filter'                  } = 'MatchNotInfo';
+	$logger_cfg{'log4perl.appender.Stderr.layout'                  } = 'Log::Log4perl::Layout::PatternLayout';
+	$logger_cfg{'log4perl.appender.Stderr.layout.ConversionPattern'} = '%S%m';
+
+	if ($args{email} ) {
+		$logger_cfg{'log4perl.logger'                                 } .= ', Email';
+		$logger_cfg{'log4perl.appender.Email'                         }  = 'Log::Dispatch::Email::MIMELite';
+		$logger_cfg{'log4perl.appender.Email.to'                      }  = $args{email};
+		$logger_cfg{'log4perl.appender.Email.subject'                 }  = $args{email_subject} || basename( $0 ) . " Errors";
+		$logger_cfg{'log4perl.appender.Email.layout'                  }  = 'Log::Log4perl::Layout::PatternLayout';
+		$logger_cfg{'log4perl.appender.Email.layout.ConversionPattern'}  = '%m';
+		$logger_cfg{'log4perl.appender.Email.Filter'                  }  = 'MatchNotInfo';
+	}
+
+	Log::Log4perl->init( \%logger_cfg );
+}
+
+__END__
+
+
+
+=head1 NAME
+
+httpd_ctl - An apache control script that supports Template Toolkit
+pre-processing
+
+=head1 SYNOPSIS
+
+B<httpd_ctl>
+[B<--all|-a>]
+[B<--batch|-b>]
+[B<--conf_file|-f> I<httpd.conf file>]
+[B<--debug|-d>]
+[B<--help|-h>]
+[B<--man|-m>]
+[B<--template|-t>]
+		 (start|stop|coldrestart|restart|graceful|configtest)+
+
+=head1 DESCRIPTION
+
+An apache control script that supports Template Toolkit pre-processing
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<--conf_file|-f> I<httpd.conf file>
+
+If file extension is .tt automatically implies --template
+
+=item B<--debug|-d>
+
+prints debug messages
+
+=item B<--help|-h>
+
+prints out usage information and exits
+
+=item B<--httpd_opt|-o> I<options>
+
+A quoted string specifying any additional options to pass through to the httpd.
+
+=item B<--man|-m>
+
+produces man page
+
+=item B<--template|-t>
+
+Requires the  --conf_file file to be processed  by Template Toolkit. The
+processed file will be placed in the same directory .
+
+This allows you to do things like environment variable substitution:
+
+ [% USE env = EnvHash %]
+ [% env.MY_LOG_DIR %]
+
+It is that simple!
+
+But, remember  you can do much more  powerful things with  Template Toolkit,
+and use variables in control   structures such as if,  for,  foreach and so on.
+See http://www.template-toolkit.org/ to read about Template Toolkit in full.
+
+=item B<start>
+
+start httpd
+
+=item B<stop>
+
+stop httpd
+
+=item B<coldrestart>
+
+stop the httpd and then start it
+
+=item B<restart>
+
+Restart httpd if running by sending a SIGHUP or start if not running
+
+=item B<graceful>
+
+Do a graceful restart by sending a SIGUSR1 or start if not running
+
+=item B<configtest>
+
+Do a configuration syntax test and check virtual hosts.
+
+=back
+
+=head1 EXIT STATUS
+
+	0 - Completed Successfully
+	1 - Otherwise
+
+=head1 AUTHOR
+
+Sagar R. Shah
+
+=head1 COPYRIGHT & LICENSE
+
+Copyright 2006 Sagar R. Shah, All Rights Reserved.
+
+This program is free software; you can redistribute it and/or modify it
+under the same terms as Perl itself.
+
+=cut
