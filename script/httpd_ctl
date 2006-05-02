@@ -16,7 +16,7 @@ use Proc::Reliable;
 use Switch;
 use Template;
 
-our $VERSION = '1.00';
+our $VERSION = '1.01';
 
 # process command line options
 my(%clo);
@@ -360,6 +360,10 @@ Do a configuration syntax test and check virtual hosts.
 
 	0 - Completed Successfully
 	1 - Otherwise
+
+=head1 See Also
+
+Template
 
 =head1 AUTHOR
 
