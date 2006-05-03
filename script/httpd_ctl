@@ -16,7 +16,7 @@ use Proc::Reliable;
 use Switch;
 use Template;
 
-our $VERSION = '1.01';
+our $VERSION = '1.02';
 
 # process command line options
 my(%clo);
@@ -62,18 +62,14 @@ sub httpd_ctl {
 	switch($arg) {
 
 		case m/^(?:graceful|restart|start|stop)$/ {
-			run_apache($httpd, $arg) or return 1;
+			run_httpd($httpd, $arg) or return 1;
 		}
 
-		# TODO: add error handling, sleeps etc. and TEST
 		case /^coldrestart$/ {
 			# First stop the server
-			run_apache($httpd, 'stop');
+			run_httpd($httpd, 'stop')  or $log->logwarn("Unable to stop httpd\n") and return 1;
 			sleep(5);  #wait a bit for all the children to shutdown
-			run_apache($httpd, 'start');
-
-			# Now start the server
-			start_apache($httpd) or return 1;
+			run_httpd($httpd, 'start') or $log->logwarn("Unable to start httpd\n") and return 1;
 		}
 
 		case m/^configtest$/ {
@@ -95,7 +91,7 @@ sub httpd_ctl {
 	return 0;
 }
 
-sub run_apache {
+sub run_httpd {
 	my($httpd, $action) = @_;
 
 	$httpd .= " -k $action";
@@ -140,8 +136,9 @@ sub tt_process_file($) {
 
 	# Process the files
 	my $tt = Template->new({
-			ABSOLUTE => 1,
-			RELATIVE => 1,
+			ABSOLUTE  => 1,
+			EVAL_PERL =>1,
+			RELATIVE  => 1,
 		});
 
 	$tt->process($infile, {}, $outfile) or $log->warn("Template Toolkit Error processing $infile: " . $tt->error . "\n")  and return;
@@ -271,7 +268,7 @@ __END__
 
 =head1 NAME
 
-httpd_ctl - An apache control script that supports Template Toolkit
+httpd_ctl - An apache httpd control script that supports Template Toolkit
 pre-processing
 
 =head1 SYNOPSIS
@@ -288,7 +285,7 @@ B<httpd_ctl>
 
 =head1 DESCRIPTION
 
-An apache control script that supports Template Toolkit pre-processing
+An apache httpd control script that supports Template Toolkit pre-processing
 
 =head1 OPTIONS
 

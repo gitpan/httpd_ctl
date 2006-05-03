@@ -1,6 +1,6 @@
 NAME
-    httpd_ctl - An apache control script that supports Template Toolkit
-    pre-processing
+    httpd_ctl - An apache httpd control script that supports Template
+    Toolkit pre-processing
 
 SYNOPSIS
     httpd_ctl [--all|-a] [--batch|-b] [--conf_file|-f *httpd.conf file*]
@@ -8,7 +8,8 @@ SYNOPSIS
     (start|stop|coldrestart|restart|graceful|configtest)+
 
 DESCRIPTION
-    An apache control script that supports Template Toolkit pre-processing
+    An apache httpd control script that supports Template Toolkit
+    pre-processing
 
 OPTIONS
     --conf_file|-f *httpd.conf file*

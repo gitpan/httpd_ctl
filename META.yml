@@ -1,9 +1,9 @@
 ---
 name: httpd_ctl
-version: 1.01
+version: 1.02
 author: []
 abstract: |-
-  An apache control script that supports Template Toolkit
+  An apache httpd control script that supports Template Toolkit
   pre-processing
 license: perl
 resources:

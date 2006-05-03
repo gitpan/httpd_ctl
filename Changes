@@ -1,4 +1,7 @@
+1.02 - Enable Template Toolkit EVAL_PERL
+			 coldrestart now implemented and tested
+
+1.01 - Added SEE ALSO section to pod - afterall without Tempate Toolkit this
+       utility wouldn't be possible
+
 1.00 - Inital release to CPAN
-
-
-
