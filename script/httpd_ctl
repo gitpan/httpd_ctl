@@ -12,11 +12,10 @@ use IO::All;
 use Log::Dispatch::Email::MIMELite;
 use Log::Log4perl;
 use Pod::Usage;
-use Proc::Reliable;
 use Switch;
 use Template;
 
-our $VERSION = '1.02';
+our $VERSION = '1.03';
 
 # process command line options
 my(%clo);
@@ -73,13 +72,11 @@ sub httpd_ctl {
 		}
 
 		case m/^configtest$/ {
-			my $proc = Proc::Reliable->new();
-			$proc->run("$httpd -t 2>&1 | perl -ne 'print unless /syntax ok/i' 1>&2");
-			return 1 if($proc->status());
+			system("$httpd -t 2>&1 | perl -ne 'print unless /syntax ok/i' 1>&2") == 0
+			  or return 1;
 			if(grep(/(?>!\#.*)VirtualHost/, io($httpdconf)->slurp)) {
 				print "Checking virtual host settings...\n";
-				$proc->run("$httpd -S 2>&1");
-				return 1 if($proc->status());
+				system("$httpd -S 2>&1") == 0 or return 1;
 			}
 		}
 
@@ -96,34 +93,17 @@ sub run_httpd {
 
 	$httpd .= " -k $action";
 
-	if($httpd =~ m/\s-X\b/) {
-		$log->debug("Starting httpd via system because -X is one of the httpd options\n");
-
-		# If running with the -X option the httpd will not put itself into the background, need to do this ourselves
-		$httpd .= " \&";
+	# If running with the -X option the httpd will not put itself into the
+	# background, need to do this ourselves
+	$httpd .= " \&";
 
 
-		# may now also be able to replace this with Proc::Reliable need to test that it doesn't hang waiting
-		if (system($httpd) == 0) {
-			$log->info("httpd started\n");
-			return 1;
-		}
-		else {
-			$log->warn("httpd could not be started: $!\n");
-			return 0;
-		}
-	}
-
-	my $proc = Proc::Reliable->new();
-	$proc->run($httpd);
-
-	if ($proc->status()) {
-		$log->warn("httpd could not be started: $!\n");
-		return 0;
+	if (system($httpd) == 0) {
+		return 1;
 	}
 	else {
-		$log->info($proc->stdout());
-		return 1;
+		$log->warn("httpd could not be started: $!\n");
+		return 0;
 	}
 }
 

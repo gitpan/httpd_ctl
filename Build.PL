@@ -19,6 +19,5 @@ Module::Build->new(
 		   create_readme => 1,
 			 scripts       => [ 'script/httpd_ctl' ],
 		   sign          => 1,
-		   create_makefile_pl => 'passthrough',
        add_to_cleanup      => [ '*.tar.gz' ],
 		  )->create_build_script;
