@@ -1,3 +1,5 @@
+1.04  - POD Updates
+
 1.03  - Removed use of Proc::Reliable because it doesn't seem to be so
         reliable on Solaris. Seen warnings errors, plus a pause when
 				the httpd is started on solaris until the code timeout occurs....

@@ -15,7 +15,7 @@ use Pod::Usage;
 use Switch;
 use Template;
 
-our $VERSION = '1.03';
+our $VERSION = '1.04';
 
 # process command line options
 my(%clo);
@@ -348,7 +348,7 @@ Sagar R. Shah
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2006 Sagar R. Shah, All Rights Reserved.
+Copyright 2006-2007 Sagar R. Shah, All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
