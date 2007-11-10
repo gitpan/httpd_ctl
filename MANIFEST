@@ -5,4 +5,3 @@ META.yml
 README
 script/httpd_ctl
 t/01_distribution.t
-SIGNATURE    Added here by Module::Build
