@@ -1,6 +1,6 @@
 ---
 name: httpd_ctl
-version: 1.05
+version: 1.06
 author: []
 abstract: |-
   An apache httpd control script that supports Template Toolkit
@@ -19,7 +19,6 @@ requires:
   Proc::Reliable: 0
   Switch: 0
   Template: 0
-  perl: 5.006
 generated_by: Module::Build version 0.2808
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.2.html

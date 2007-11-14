@@ -1,11 +1,11 @@
 #!/usr/bin/perl
 
 # pragmata
+use 5.006;
 use strict;
 use warnings;
 
 # CPAN modules
-use 5.006;
 use File::Basename;
 use File::Which;
 use Getopt::Long;
@@ -16,7 +16,7 @@ use Pod::Usage;
 use Switch;
 use Template;
 
-our $VERSION = '1.05';
+our $VERSION = '1.06';
 
 # process command line options
 my(%clo);

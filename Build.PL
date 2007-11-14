@@ -1,3 +1,4 @@
+use 5.006;
 use Module::Build;
 
 Module::Build->new(
@@ -5,7 +6,6 @@ Module::Build->new(
     dist_name   => 'httpd_ctl',
     dist_version_from => 'script/httpd_ctl',
     requires      => {
-        'perl'          => '5.006',
         'File::Basename' => 0,
         'File::Which' => 0,
         'Getopt::Long' => 0,
@@ -19,5 +19,5 @@ Module::Build->new(
     },
     create_readme => 1,
     scripts       => [ 'script/httpd_ctl' ],
-    add_to_cleanup      => [ '*.tar.gz' ],
+    add_to_cleanup       => [ '*.tar.gz', 'Build', '_build' ],
 )->create_build_script;
